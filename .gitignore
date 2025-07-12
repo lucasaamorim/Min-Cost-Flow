@@ -1,0 +1,10 @@
+# IDE
+.vscode
+.idea
+
+#Virtual Environment
+.venv
+
+# Build
+build
+debug
