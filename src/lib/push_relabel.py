@@ -1,15 +1,18 @@
 import collections
 
 class PushRelabel:
+    """
+    Implementação de Push-Relabel para encontrar fluxo máximo
+    """
     def __init__(self, num_vertices):
         """
-        Initializes the data structures for the algorithm.
+        Inicialização.
         
         Args:
-            num_vertices (int): The total number of vertices in the graph, including source and sink.
-                                Vertices are assumed to be numbered 0 to num_vertices-1.
+            num_vertices (int): Número de Nós no grafo, incluindo fonte e sumidouro.
+                                É considerado que os nós estão numerados de 0 a num_vertices-1.
         """
-        # Número de vértices no grafo
+        # Número de nós no grafo
         self.V = num_vertices
         
         # Fluxo recebido que não foi enviado
@@ -137,7 +140,7 @@ class PushRelabel:
                             print("push done")
                             self.push(u, v)
                             pushed = True
-                            break # Após realizar um push, vai para o próximo vértice com excesso
+                            break # Após realizar um push, vai para o próximo nó com excesso
                     
                     # Se não houve PUSH, então precisamos fazer um RELABEL em u.
                     if not pushed:
