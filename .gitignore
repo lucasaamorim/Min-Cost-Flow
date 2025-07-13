@@ -8,3 +8,5 @@
 # Build
 build
 debug
+
+__pycache__

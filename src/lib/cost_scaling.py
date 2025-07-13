@@ -1,4 +1,6 @@
 import collections
+from itertools import product
+from push_relabel import PushRelabel
 
 class MinCostPushRelabel:
     """
@@ -19,6 +21,10 @@ class MinCostPushRelabel:
         self.capacity = [[0] * self.V for _ in range(self.V)]
         self.flow = [[0] * self.V for _ in range(self.V)]
         self.cost = [[0] * self.V for _ in range(self.V)]
+        
+        #Índice dos nós de demanda (para checagem rápida da viabilidade do fluxo)
+        self.demand = []
+        self.supply = []
         
         # Excesso de Fluxo (Similar ao push-relabel)
         self.excess = [0] * self.V
@@ -52,7 +58,14 @@ class MinCostPushRelabel:
             u (int): Nó que queremos definir uma oferta/demanda.
             supply (int): Valor de oferta/demanda.
         """
-        self.excess[u] = supply
+        if supply > 0:
+            self.excess[u] = supply
+            self.supply.append(u)
+        elif supply < 0:
+            self.excess[u] = supply
+            self.demand.append(u)
+        else:
+            print("Valor de oferta deve ser diferente de zero")
 
     def _reduced_cost(self, u, v):
         """
@@ -61,7 +74,7 @@ class MinCostPushRelabel:
         """
         return self.cost[u][v] + self.potential[u] - self.potential[v]
 
-    def _push(self, u, v):
+    def push(self, u, v):
         """
         Envia fluxo de um nó com excesso u para um vizinho v.
         Só é realizado em arcos "aceitáveis" onde o custo reduzido é negativo.
@@ -75,7 +88,7 @@ class MinCostPushRelabel:
         self.excess[u] -= delta
         self.excess[v] += delta
 
-    def _relabel(self, u, epsilon):
+    def relabel(self, u, epsilon):
         """
         Diminui o potencial do nó u.
         Torna ao menos um arco "aceitável".
@@ -84,23 +97,25 @@ class MinCostPushRelabel:
             u (int): Nó que vai ser feito o relabel.
             epsilon (float): Tolerância de erro atual.
         """
-        min_potential_diff = float('inf')
         
+        min_potential_diff = float('inf')
+        #potential[u] = min_edge_weight
         # Encontra a menor diferença de potencial que tornaria um arco admissível
         for v in self.graph[u]:
             if self.capacity[u][v] - self.flow[u][v] > 0:
                 # The new potential should be p[v] - c[u,v] - epsilon
                 min_potential_diff = min(min_potential_diff, self.potential[v] - self.cost[u][v])
-        
+
         if min_potential_diff != float('inf'):
             # Decrease the potential to make at least one arc admissible
             self.potential[u] = min_potential_diff - epsilon
-
-    def _refine(self, epsilon):
+    
+    def refine(self, epsilon):
         """
         Parte principal do algoritmo: Encontra um fluxo epsilon-opitimal.
         Elimina todo fluxo em excesso através de pushs e relabels.
         """
+
         # 1. Saturar todos os arcos aceitáveis para criar um pré-fluxo
         for u in range(self.V):
             for v in self.graph[u]:
@@ -125,7 +140,7 @@ class MinCostPushRelabel:
                     # Confere se o arco é aceitável para realizarmos um PUSH
                     if self.capacity[u][v] - self.flow[u][v] > 0 and self._reduced_cost(u, v) < 0:
                         was_inactive = self.excess[v] <= 0
-                        self._push(u, v)
+                        self.push(u, v)
                         # Caso o push tenha gerado um excesso em V, adicionamos ele na lista de nós com excesso
                         if self.excess[v] > 0 and was_inactive:
                             active_nodes.append(v)
@@ -133,12 +148,12 @@ class MinCostPushRelabel:
                 
                 # Caso não tenha ocorrido nenhum push no nó, realizamos um relabel dele
                 if not pushed:
-                    self._relabel(u, epsilon)
+                    self.relabel(u, epsilon)
                     continue
 
     def min_cost_flow(self, alpha=2):
         """
-        Constrói um fluxo (máximo) de custo mínimo no grafo 
+        Constrói um fluxo de custo mínimo no grafo 
         
         Args:
             alpha (int): Fator de redução do epsilon em cada fase do algoritmo.
@@ -160,13 +175,41 @@ class MinCostPushRelabel:
         # 2. Inicialização do epsilon
         epsilon = float(max_abs_cost)
 
-        # 3. Loop de escalonamento
+        # 3. Obter uma circulação viável usando algum algoritmo de fluxo máximo
+        
+        # Criar um grafo com os vértices do nosso grafo original + fonte e sumidouro artificial
+        # A fonte artificial será o nó n-2 e o sumidouro artificial será n-1 (considerando n = número de nós no grafo)
+        g = PushRelabel(self.V+2);
+        
+        source = g.V-2
+        sink = g.V-1
+        # Exportar as arestas originais para o grafo g
+        [g.add_edge(u,v,self.capacity[u][v]) for u,v in product(range(self.V),range(self.V)) if self.capacity[u][v] > 0] 
+        # Conectar as arestaas de oferta com a fonte artificial (arestas com capacidade = |demanda no nó de oferta|)
+        [g.add_edge(source,v,abs(self.excess[v])) for v in self.supply]
+        # Conectar as arestas de demanda com o sumidouro artificial (arestas com capacidade = |demanda no nó de demanda|)
+        [g.add_edge(u,sink,abs(self.excess[u])) for u in self.demand]
+
+        # Encontrar um fluxo máximo (e consequentemente uma circulação viável, caso exista)
+        g.max_flow();
+        
+
+        # Confere se a circulação é viável (toda a demanda é atendida)
+        if sum([f[sink] for f in g.flow]) != sum(g.flow[source]):
+            print("Circulação não viável. Não há como atender toda a demanda.")
+            return None, None
+        
+        # Atualizar o nosso grafo para a circulação encontrada via push-relabel
+        self.flow = [[g.flow[u][v] for v in range(self.V)] for u in range(self.V)]
+        self.excess = [0] * self.V
+
+        # 4. Loop de escalonamento
         while epsilon >= 1:
             print(f"--- Realizando refine com epsilon = {epsilon / scaling_factor:.4f} ---")
-            self._refine(epsilon)
+            self.refine(epsilon)
             epsilon /= alpha
 
-        # 4. Calcula o custo final com os custo originais (não escalonados)
+        # 5. Calcula o custo final com os custos originais (não escalonados)
         total_cost = 0
         for u in range(self.V):
             for v in range(self.V):
@@ -180,7 +223,7 @@ class MinCostPushRelabel:
 if __name__ == "__main__":
     print("Teste - Goldberg-Tarjan Min-Cost Flow (Cost-Scaling Push-Relabel)")
     
-    # 6 nodes: 0=Fábrica 1, 1=Fábrica 2, 2,3=Armazens, 4=Cidade A, 5=Cidade B
+    # 6 nós: 0=Fábrica 1, 1=Fábrica 2, 2,3=Armazens, 4=Cidade A, 5=Cidade B
     num_nodes = 6
     g = MinCostPushRelabel(num_nodes)
     
@@ -214,3 +257,29 @@ if __name__ == "__main__":
         for c in range(num_nodes):
             if final_flow[r][c] > 0:
                 print(f"  Fluxo de {r} -> {c}: {final_flow[r][c]}")
+
+    print(f"Teste - Comparando com Google OR TOOLS")
+    num_nodes = 4
+    g = MinCostPushRelabel(num_nodes)
+
+    # Edges: (u, v, capacity, cost)
+    # One edge has a negative cost
+    edges = [
+        (0, 1, 10, 5),      # A regular positive-cost edge
+        (0, 2, 10, -8),     # A "profitable" negative-cost edge
+        (1, 3, 10, 2),
+        (2, 3, 10, 2)
+    ]
+
+    for u, v, cap, cost in edges:
+        g.add_edge(u, v, cap, cost)
+
+    # Supply and Demand
+    g.set_supply(0, 15) # Source node
+    g.set_supply(3, -15) # Sink node
+
+    min_cost, _ = g.min_cost_flow()
+
+    print(f"\n--- Simple Negative Cost Test ---")
+    print(f"The minimum cost is: {min_cost}")
+
