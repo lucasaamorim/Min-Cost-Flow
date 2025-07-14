@@ -137,16 +137,13 @@ class PushRelabel:
                     pushed = False
                     for v in range(self.V):
                         if self.capacity[u][v] - self.flow[u][v] > 0 and self.height[u] == self.height[v] + 1:
-                            print("push done")
                             self.push(u, v)
                             pushed = True
                             break # Após realizar um push, vai para o próximo nó com excesso
                     
                     # Se não houve PUSH, então precisamos fazer um RELABEL em u.
                     if not pushed:
-                        print("relabel done")
                         self.relabel(u)
-            print(f"iteração {it} feita")
             it += 1
         # O fluxo máximo é o excesso no sumidouro.
         return self.excess[t]

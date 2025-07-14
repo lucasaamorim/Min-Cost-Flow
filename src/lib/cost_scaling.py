@@ -1,6 +1,7 @@
 import collections
 from itertools import product
-from push_relabel import PushRelabel
+from copy import deepcopy
+from src.lib.push_relabel import PushRelabel
 
 class MinCostPushRelabel:
     """
@@ -67,7 +68,7 @@ class MinCostPushRelabel:
         else:
             print("Valor de oferta deve ser diferente de zero")
 
-    def _reduced_cost(self, u, v):
+    def reduced_cost(self, u, v):
         """
         Calcula o custo reduzido de um arco, Que guia o algoritmo.
         Um arco é considerado "aceitável" se seu custo reduzido for negativo.
@@ -112,14 +113,14 @@ class MinCostPushRelabel:
     
     def refine(self, epsilon):
         """
-        Parte principal do algoritmo: Encontra um fluxo epsilon-opitimal.
-        Elimina todo fluxo em excesso através de pushs e relabels.
+        Parte principal do algoritmo: Encontra um fluxo epsilon-optimal.
+        Elimina todo fluxo em excesso através de pushes e relabels.
         """
 
         # 1. Saturar todos os arcos aceitáveis para criar um pré-fluxo
         for u in range(self.V):
             for v in self.graph[u]:
-                if self._reduced_cost(u, v) < 0:
+                if self.reduced_cost(u, v) < 0:
                     delta = self.capacity[u][v] - self.flow[u][v]
                     if delta > 0:
                         self.flow[u][v] += delta
@@ -138,7 +139,7 @@ class MinCostPushRelabel:
                 pushed = False
                 for v in self.graph[u]:
                     # Confere se o arco é aceitável para realizarmos um PUSH
-                    if self.capacity[u][v] - self.flow[u][v] > 0 and self._reduced_cost(u, v) < 0:
+                    if self.capacity[u][v] - self.flow[u][v] > 0 and self.reduced_cost(u, v) < 0:
                         was_inactive = self.excess[v] <= 0
                         self.push(u, v)
                         # Caso o push tenha gerado um excesso em V, adicionamos ele na lista de nós com excesso
@@ -166,6 +167,7 @@ class MinCostPushRelabel:
         # 1. Escala custos para valores inteiros e garante a otimalidade
         scaling_factor = self.V
         max_abs_cost = 0
+        original_costs = deepcopy(self.cost)
         for u in range(self.V):
             for v in self.graph[u]:
                 self.cost[u][v] *= scaling_factor
@@ -191,7 +193,7 @@ class MinCostPushRelabel:
         [g.add_edge(u,sink,abs(self.excess[u])) for u in self.demand]
 
         # Encontrar um fluxo máximo (e consequentemente uma circulação viável, caso exista)
-        g.max_flow();
+        g.max_flow(source, sink);
         
 
         # Confere se a circulação é viável (toda a demanda é atendida)
@@ -214,8 +216,7 @@ class MinCostPushRelabel:
         for u in range(self.V):
             for v in range(self.V):
                 if self.flow[u][v] > 0:
-                    original_cost = self.cost[u][v] / scaling_factor
-                    total_cost += self.flow[u][v] * original_cost
+                    total_cost += self.flow[u][v] * original_costs[u][v]
                     
         return total_cost, self.flow
 
